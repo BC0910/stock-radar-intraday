@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>盤中成交值排行</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --row-alt: #f9fafb;
+    --new-bg: #fff7ed;
+    --new-fg: #c2410c;
+    --day3-bg: #fef2f2;
+    --day3-fg: #b91c1c;
+    --accent: #2563eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --fg: #e5e7eb;
+      --muted: #9ca3af;
+      --border: #262a33;
+      --row-alt: #171a21;
+      --new-bg: #3a2a12;
+      --new-fg: #fbbf24;
+      --day3-bg: #3a1414;
+      --day3-fg: #f87171;
+      --accent: #60a5fa;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 16px;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
+  .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 4px; }
+  .status { font-size: 0.85rem; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 0.9rem; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--bg); color: var(--muted); font-weight: 600; }
+  tbody tr:nth-child(even) { background: var(--row-alt); }
+  tr.new-entrant { background: var(--new-bg); color: var(--new-fg); }
+  tr.day3-alert { background: var(--day3-bg); color: var(--day3-fg); }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 0.75rem; margin-left: 4px; }
+  .tag-new { background: var(--new-fg); color: var(--bg); }
+  .tag-day3 { background: var(--day3-fg); color: var(--bg); }
+  .refresh { margin-top: 12px; font-size: 0.85rem; color: var(--accent); background: none; border: 1px solid var(--accent); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  .empty { color: var(--muted); padding: 24px; text-align: center; }
+</style>
+</head>
+<body>
+  <h1>📡 盤中成交值排行（前30名）</h1>
+  <div class="meta" id="meta">載入中...</div>
+  <div class="status" id="status"></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>排名</th>
+          <th>代號</th>
+          <th>名稱</th>
+          <th>市場</th>
+          <th>族群</th>
+          <th>估算成交值</th>
+          <th>連續留榜天數</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <button class="refresh" onclick="load()">重新整理</button>
+
+<script>
+function formatValue(v) {
+  if (v == null) return "-";
+  if (v >= 1e8) return (v / 1e8).toFixed(2) + " 億";
+  if (v >= 1e4) return (v / 1e4).toFixed(0) + " 萬";
+  return String(Math.round(v));
+}
+
+async function load() {
+  const meta = document.getElementById("meta");
+  const status = document.getElementById("status");
+  const tbody = document.getElementById("tbody");
+  try {
+    const resp = await fetch("./data/latest.json?_=" + Date.now());
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const data = await resp.json();
+
+    meta.textContent = `資料日期 ${data.date}｜時段 ${data.session_label}｜更新時間 ${new Date(data.generated_at).toLocaleString("zh-TW")}`;
+    status.textContent = data.trading_day ? "" : "⚠️ 今天非交易日或尚未開盤，以下為上次可查到的排行資料";
+
+    tbody.innerHTML = "";
+    if (!data.ranking || data.ranking.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">尚無資料</td></tr>';
+      return;
+    }
+    for (const s of data.ranking) {
+      const tr = document.createElement("tr");
+      if (s.is_day3_alert) tr.className = "day3-alert";
+      else if (s.is_new_entrant) tr.className = "new-entrant";
+
+      let nameCell = s.name;
+      if (s.is_new_entrant) nameCell += ' <span class="tag tag-new">新上榜</span>';
+      if (s.is_day3_alert) nameCell += ' <span class="tag tag-day3">連續第3天</span>';
+
+      tr.innerHTML = `
+        <td>${s.rank}</td>
+        <td>${s.code}</td>
+        <td>${nameCell}</td>
+        <td>${s.market}</td>
+        <td>${s.group}</td>
+        <td>${formatValue(s.value)}</td>
+        <td>${s.consecutive_days != null ? s.consecutive_days : "-"}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  } catch (err) {
+    meta.textContent = "載入失敗";
+    status.textContent = String(err);
+  }
+}
+
+load();
+</script>
+</body>
+</html>
