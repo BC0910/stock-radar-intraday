@@ -8,6 +8,8 @@ on:
     # (第一次排程就沒觸發，符合這個已知現象)。錯開幾分鐘可以大幅降低被延遲/跳過的機率。
     - cron: "5 3 * * 1-5"
     - cron: "5 5 * * 1-5"
+    # TEMP smoke test — 驗證 schedule trigger 本身有沒有被 GitHub 排進佇列，驗完就會移除這行
+    - cron: "55 5 * * *"
   workflow_dispatch: {}
 
 permissions:
