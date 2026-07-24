@@ -2,9 +2,12 @@ name: Intraday ranking update
 
 on:
   schedule:
-    # 台灣時間 11:00 / 13:00 (UTC+8) = UTC 03:00 / 05:00，只在週一到週五(台股交易日基礎範圍)觸發
-    - cron: "0 3 * * 1-5"
-    - cron: "0 5 * * 1-5"
+    # 台灣時間約 11:05 / 13:05 (UTC+8) = UTC 03:05 / 05:05，只在週一到週五(台股交易日基礎範圍)觸發。
+    # 刻意不排在整點(0分)：GitHub Actions 的 schedule trigger 在每個整點是全站最壅塞的時刻，
+    # 官方文件明講整點附近容易延遲、甚至偶爾直接被跳過，尤其新建立沒多久的 workflow 更明顯
+    # (第一次排程就沒觸發，符合這個已知現象)。錯開幾分鐘可以大幅降低被延遲/跳過的機率。
+    - cron: "5 3 * * 1-5"
+    - cron: "5 5 * * 1-5"
   workflow_dispatch: {}
 
 permissions:

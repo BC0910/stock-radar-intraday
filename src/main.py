@@ -135,12 +135,11 @@ def run(dry_run: bool = False, pages_url: str = None) -> dict:
             decision["day3_alerts"], stock_by_code, code_to_group, entrants_state)
         message = telegram_notify.build_message(session_label, new_entrants_msg, day3_msg, pages_url)
 
-        if dry_run:
-            print("      [dry-run] 不會真的呼叫 Telegram API，以下是預計推播的訊息內容：")
-            print("      ----------------------------------------")
-            print(message)
-            print("      ----------------------------------------")
-        else:
+        print(f"      {'[dry-run] 不會真的呼叫 Telegram API，' if dry_run else ''}訊息內容：")
+        print("      ----------------------------------------")
+        print(message)
+        print("      ----------------------------------------")
+        if not dry_run:
             telegram_notify.send_message(message)
             print("      已推播 Telegram")
 
