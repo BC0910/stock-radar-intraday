@@ -1,12 +1,9 @@
-"""讀寫 data/state/*.json：
-- history.json：每個交易日的前30名代號集合(用當天最近一次執行結果覆寫，所以到收盤後就是13:00那次的
-  結果)，只保留最近 HISTORY_MAX_DAYS 天，供未來擴充用(目前 compare.py 主要靠 entrants.json 判斷連續
-  天數，history.json 保留當備查/除錯用)。
-- entrants.json：追蹤「曾被標記為新上榜」的股票，各自目前連續留榜天數(用來判斷是否要觸發「連續第3
-  天」提醒)。只要某天不在前30名內就會被移除追蹤。
-- last_pushed.json：上一次「實際推播過」的前30名代號集合，用來判斷這次組合是否完全沒變(去重複)。
-- announced_today.json：今天已經播報過的新上榜代號(避免11:00播過、13:00沒有新東西時又重播一次)，
-  日期跟今天不同就視為空清單重新開始。
+"""讀寫 data/state/*.json（v2 訊息格式用）：
+- group_history.json：每個交易日的完整族群排名(不限前7大)，用當天最近一次執行結果覆寫，供
+  group_analysis.attach_trend() 算「今天前7 vs 昨天前7」用。
+- stock_rank_history.json：每檔股票最近幾個交易日的排名序列(見 stock_trends.py 說明)。
+- last_pushed_msg1.json／last_pushed_msg2.json：訊息1(前7大族群)、訊息2(新上榜/持續上升/快速上升)
+  各自上一次「實際推播過」的內容集合，用來判斷這次組合是否完全沒變(去重複，兩則訊息各自獨立判斷)。
 """
 import json
 from pathlib import Path
@@ -14,12 +11,12 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATE_DIR = BASE_DIR / "data" / "state"
 
-HISTORY_PATH = STATE_DIR / "history.json"
-ENTRANTS_PATH = STATE_DIR / "entrants.json"
-LAST_PUSHED_PATH = STATE_DIR / "last_pushed.json"
-ANNOUNCED_TODAY_PATH = STATE_DIR / "announced_today.json"
+GROUP_HISTORY_PATH = STATE_DIR / "group_history.json"
+STOCK_RANK_HISTORY_PATH = STATE_DIR / "stock_rank_history.json"
+LAST_PUSHED_MSG1_PATH = STATE_DIR / "last_pushed_msg1.json"
+LAST_PUSHED_MSG2_PATH = STATE_DIR / "last_pushed_msg2.json"
 
-HISTORY_MAX_DAYS = 15
+GROUP_HISTORY_MAX_DAYS = 10
 
 
 def _load_json(path: Path, default):
@@ -36,44 +33,51 @@ def _save_json(path: Path, data):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def load_history() -> dict:
-    return _load_json(HISTORY_PATH, {"trading_days": []})
+def load_group_history() -> dict:
+    return _load_json(GROUP_HISTORY_PATH, {"trading_days": []})
 
 
-def upsert_today_history(history: dict, today_iso: str, top30_codes: list) -> dict:
-    days = [d for d in history["trading_days"] if d["date"] != today_iso]
-    days.append({"date": today_iso, "top30_codes": top30_codes})
+def get_yesterday_group_ranking(group_history: dict, today_iso: str):
+    """回傳最近一筆日期早於今天的族群排名(list of {name, rank})，找不到就回傳 None。"""
+    days = [d for d in group_history.get("trading_days", []) if d["date"] < today_iso]
+    if not days:
+        return None
+    return max(days, key=lambda d: d["date"])["ranking"]
+
+
+def upsert_today_group_history(group_history: dict, today_iso: str, ranking: list) -> dict:
+    days = [d for d in group_history.get("trading_days", []) if d["date"] != today_iso]
+    days.append({"date": today_iso, "ranking": ranking})
     days.sort(key=lambda d: d["date"])
-    history["trading_days"] = days[-HISTORY_MAX_DAYS:]
-    return history
+    group_history["trading_days"] = days[-GROUP_HISTORY_MAX_DAYS:]
+    return group_history
 
 
-def save_history(history: dict):
-    _save_json(HISTORY_PATH, history)
+def save_group_history(group_history: dict):
+    _save_json(GROUP_HISTORY_PATH, group_history)
 
 
-def load_entrants() -> dict:
-    return _load_json(ENTRANTS_PATH, {})
+def load_stock_rank_history() -> dict:
+    return _load_json(STOCK_RANK_HISTORY_PATH, {})
 
 
-def save_entrants(entrants: dict):
-    _save_json(ENTRANTS_PATH, entrants)
+def save_stock_rank_history(stock_rank_history: dict):
+    _save_json(STOCK_RANK_HISTORY_PATH, stock_rank_history)
 
 
-def load_last_pushed() -> dict:
-    return _load_json(LAST_PUSHED_PATH, {"date": None, "codes": []})
+def load_last_pushed_msg1() -> set:
+    data = _load_json(LAST_PUSHED_MSG1_PATH, {"group_names": []})
+    return set(data.get("group_names", []))
 
 
-def save_last_pushed(today_iso: str, codes: list):
-    _save_json(LAST_PUSHED_PATH, {"date": today_iso, "codes": sorted(codes)})
+def save_last_pushed_msg1(group_names: set):
+    _save_json(LAST_PUSHED_MSG1_PATH, {"group_names": sorted(group_names)})
 
 
-def load_announced_today(today_iso: str) -> set:
-    data = _load_json(ANNOUNCED_TODAY_PATH, {"date": None, "codes": []})
-    if data.get("date") != today_iso:
-        return set()
+def load_last_pushed_msg2() -> set:
+    data = _load_json(LAST_PUSHED_MSG2_PATH, {"codes": []})
     return set(data.get("codes", []))
 
 
-def save_announced_today(today_iso: str, codes: set):
-    _save_json(ANNOUNCED_TODAY_PATH, {"date": today_iso, "codes": sorted(codes)})
+def save_last_pushed_msg2(codes: set):
+    _save_json(LAST_PUSHED_MSG2_PATH, {"codes": sorted(codes)})

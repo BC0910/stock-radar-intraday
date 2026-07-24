@@ -69,9 +69,11 @@ def _fetch_batch_with_retry(symbols):
 
 
 def _parse_item(item, code, name, market):
+    prev_close = _to_number(item.get("y"))
     price = _to_number(item.get("z"))
+    change = (price - prev_close) if (price is not None and prev_close is not None) else None
     if price is None:
-        price = _to_number(item.get("y"))
+        price = prev_close
     volume = _to_number(item.get("v"))
     if price is None or volume is None or volume <= 0:
         return None
@@ -82,6 +84,7 @@ def _parse_item(item, code, name, market):
         "price": price,
         "volume": volume,
         "value": price * volume,
+        "change": change,
     }
 
 

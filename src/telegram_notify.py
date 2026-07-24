@@ -1,7 +1,8 @@
-"""組出 Telegram 推播訊息內容 + 呼叫 Telegram Bot API 送出。
+"""組出 Telegram 推播訊息(v2: 族群/個股趨勢版，共3則) + 呼叫 Telegram Bot API 送出。
 
-訊息內容(依規格)：時段、新上榜股票清單(代號/名稱/族群/連續留榜天數)、連續第3天的額外標註、一段可
-直接複製貼到 Claude App 查詢的題詞、GitHub Pages 連結。
+訊息1：前7大族群(前100名) + 昨日對比趨勢
+訊息2：前50名次異動(新上榜/持續上升/快速上升)
+訊息3：可直接複製貼到 Claude App 的查詢題詞(合併成一則，各題詞空行分隔)
 """
 import os
 
@@ -9,52 +10,77 @@ import requests
 
 TELEGRAM_API_BASE = "https://api.telegram.org"
 
-
-def _format_stock_line(stock: dict, tag: str = "") -> str:
-    return f"• {stock['code']} {stock['name']}（{stock['group']}，連續第{stock['consecutive_days']}天）{tag}"
+_DIRECTION_EMOJI = {"up": "🔴", "down": "🟢", "flat": "⚪"}
 
 
-def build_claude_query_prompt(stocks: list) -> str:
-    if not stocks:
-        return ""
-    names = "、".join(f"{s['name']}({s['code']})" for s in stocks)
-    groups = sorted({s["group"] for s in stocks if s["group"] != "未分類"})
-    prompt = f"{names} 最近為什麼成交值大增？有什麼相關新聞或題材？"
-    if groups:
-        prompt += f"（所屬族群：{'/'.join(groups)}）"
-    return prompt
+def _trend_text(trend) -> str:
+    if trend == "new":
+        return "新進榜"
+    if trend > 0:
+        return f"↑{trend}"
+    if trend < 0:
+        return f"↓{-trend}"
+    return "→"
 
 
-def build_message(session_label: str, new_entrants: list, day3_entrants: list, pages_url: str) -> str:
-    lines = [f"📡 盤中成交值排行異動（{session_label}）"]
+def build_message1(top_groups_with_trend: list, declined_group_names: list) -> str:
+    """top_groups_with_trend: group_analysis.attach_trend() 的第一個回傳值。"""
+    lines = ["前7大族群（前100名）"]
+    for g in top_groups_with_trend:
+        names = "、".join(s["name"] for s in g["representative_stocks"])
+        emoji = _DIRECTION_EMOJI[g["direction"]]
+        lines.append(f"{g['rank']}. {g['name']}（{g['count']}檔）{emoji} {names}　{_trend_text(g['trend'])}")
 
-    day3_codes = {s["code"] for s in day3_entrants}
-
-    if new_entrants:
+    if declined_group_names:
         lines.append("")
-        lines.append(f"新上榜 {len(new_entrants)} 檔：")
-        for s in new_entrants:
-            tag = "🔥連續第3天" if s["code"] in day3_codes else ""
-            lines.append(_format_stock_line(s, tag))
-
-    extra_day3 = [s for s in day3_entrants if s["code"] not in {n["code"] for n in new_entrants}]
-    if extra_day3:
-        lines.append("")
-        lines.append(f"連續留榜滿3天 {len(extra_day3)} 檔：")
-        for s in extra_day3:
-            lines.append(_format_stock_line(s, "🔥"))
-
-    all_flagged = new_entrants + extra_day3
-    prompt = build_claude_query_prompt(all_flagged)
-    if prompt:
-        lines.append("")
-        lines.append("📋 可複製貼到 Claude App 的查詢題詞：")
-        lines.append(prompt)
-
-    lines.append("")
-    lines.append(f"🔗 完整排行：{pages_url}")
+        lines.append(f"📉 趨勢下降：{'、'.join(declined_group_names)}（昨日前7，今日掉出）")
 
     return "\n".join(lines)
+
+
+def _format_stock_line2(stock: dict, extra: str = "") -> str:
+    group_part = f"〔{stock['group']}〕" if stock.get("group") else ""
+    return f"・{stock['name']}（{stock['code']}）{group_part}{extra}"
+
+
+def build_message2(new_entrants: list, persistent_rise: list, fast_rise: list) -> str:
+    lines = ["前50名次異動"]
+
+    if new_entrants:
+        lines.append("新上榜（首日出現）")
+        for s in new_entrants:
+            lines.append(_format_stock_line2(s))
+        lines.append("")
+
+    if persistent_rise:
+        lines.append("持續上升")
+        for s in persistent_rise:
+            lines.append(_format_stock_line2(s, f"連續{s['streak_days']}日排名進步"))
+        lines.append("")
+
+    if fast_rise:
+        lines.append("快速上升")
+        for s in fast_rise:
+            lines.append(_format_stock_line2(s, f"單日由{s['prev_rank']}名衝進{s['rank']}名"))
+        lines.append("")
+
+    return "\n".join(lines).rstrip()
+
+
+def build_message3(top_groups_with_trend: list, flagged_stocks: list) -> str:
+    """top_groups_with_trend: 訊息1 的前7大族群(每組附代表股)。flagged_stocks: 訊息2 挑出的股票
+    (new_entrants+persistent_rise+fast_rise，已依代號去重)。兩邊都各自出一則查詢題詞、合併成一則訊
+    息(空行分隔)；哪個先拆開發送比較好用，等實際跑起來再依使用者回饋調整。"""
+    prompts = []
+
+    for g in top_groups_with_trend:
+        names = "、".join(s["name"] for s in g["representative_stocks"])
+        prompts.append(f"{g['name']}族群（{names}） 國際金流/供需/缺貨/漲價新聞")
+
+    for s in flagged_stocks:
+        prompts.append(f"{s['name']}({s['code']}) 今日盤中成交值大增原因")
+
+    return "\n\n".join(prompts)
 
 
 def send_message(text: str) -> None:

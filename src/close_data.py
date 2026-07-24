@@ -51,6 +51,19 @@ def _to_number(value):
         return None
 
 
+def _signed_change(sign_html: str, magnitude: str):
+    """www.twse.com.tw afterTrading 回傳的漲跌是「HTML 顏色標記(方向) + 絕對值」分開兩欄，這裡合成
+    有號數字(跟 stock-radar/src/fetch.py 同一招，各自獨立實作)。"""
+    value = _to_number(magnitude)
+    if value is None:
+        return None
+    if "color:red" in (sign_html or ""):
+        return value
+    if "color:green" in (sign_html or ""):
+        return -value
+    return 0.0 if value == 0 else value
+
+
 def _fetch_twse_aftertrading():
     resp = requests.get(TWSE_AFTERTRADING_MI_INDEX, params={"type": "ALLBUT0999", "response": "json"},
                          headers=_HEADERS, timeout=30)
@@ -72,7 +85,10 @@ def _fetch_twse_aftertrading():
         trade_value = _to_number(row[4])
         if not code or trade_value is None:
             continue
-        records.append({"code": code, "name": name, "market": "TWSE", "trade_value": trade_value})
+        records.append({
+            "code": code, "name": name, "market": "TWSE", "trade_value": trade_value,
+            "close_price": _to_number(row[8]), "change": _signed_change(row[9], row[10]),
+        })
     return date_iso, records
 
 
@@ -91,8 +107,11 @@ def _fetch_twse_stock_day_all():
         code = (r.get("Code") or "").strip()
         if not code or trade_value is None:
             continue
-        records.append({"code": code, "name": (r.get("Name") or "").strip(), "market": "TWSE",
-                         "trade_value": trade_value})
+        records.append({
+            "code": code, "name": (r.get("Name") or "").strip(), "market": "TWSE",
+            "trade_value": trade_value,
+            "close_price": _to_number(r.get("ClosingPrice")), "change": _to_number(r.get("Change")),
+        })
     return date_iso, records
 
 
@@ -119,8 +138,11 @@ def _fetch_tpex_close():
         code = (r.get("SecuritiesCompanyCode") or "").strip()
         if not code or trade_value is None:
             continue
-        records.append({"code": code, "name": (r.get("CompanyName") or "").strip(), "market": "TPEx",
-                         "trade_value": trade_value})
+        records.append({
+            "code": code, "name": (r.get("CompanyName") or "").strip(), "market": "TPEx",
+            "trade_value": trade_value,
+            "close_price": _to_number(r.get("Close")), "change": _to_number(r.get("Change")),
+        })
     return date_iso, records
 
 
@@ -142,6 +164,22 @@ def get_close_snapshot(run_date_iso: str, force_refresh: bool = False) -> dict:
     期，不是資料本身的日期)當快取檔名，同一天內(如11:00跟13:00兩次執行)只打一次官方API。"""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_path = CACHE_DIR / f"{run_date_iso}.json"
+    if not force_refresh and cache_path.exists():
+        return json.loads(cache_path.read_text(encoding="utf-8"))
+
+    snapshot = _fetch_fresh()
+    cache_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+    return snapshot
+
+
+def get_today_official_snapshot(today_iso: str, force_refresh: bool = False) -> dict:
+    """給 postclose_stats 模式用：單純抓「目前官方公布的最新收盤資料」，不像 get_close_snapshot() 那樣
+    預設語意是「前一交易日」。呼叫端要自己檢查回傳的 twse_date/tpex_date 是不是等於 today_iso，藉此判
+    斷「今天的收盤資料公布了沒」——17:00 執行時通常已經公布，若 cron-job.org 誤觸發在收盤前，這裡就會
+    抓到還是前一天的資料，呼叫端可以據此判斷資料還沒準備好、不寫入不推播。跟 get_close_snapshot() 用
+    不同的快取檔名(postclose_ 前綴)，避免互相覆蓋。"""
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_path = CACHE_DIR / f"postclose_{today_iso}.json"
     if not force_refresh and cache_path.exists():
         return json.loads(cache_path.read_text(encoding="utf-8"))
 

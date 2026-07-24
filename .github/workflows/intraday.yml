@@ -1,14 +1,19 @@
 name: Intraday ranking update
 
 on:
-  schedule:
-    # 台灣時間約 11:05 / 13:05 (UTC+8) = UTC 03:05 / 05:05，只在週一到週五(台股交易日基礎範圍)觸發。
-    # 刻意不排在整點(0分)：GitHub Actions 的 schedule trigger 在每個整點是全站最壅塞的時刻，
-    # 官方文件明講整點附近容易延遲、甚至偶爾直接被跳過，尤其新建立沒多久的 workflow 更明顯
-    # (第一次排程就沒觸發，符合這個已知現象)。錯開幾分鐘可以大幅降低被延遲/跳過的機率。
-    - cron: "5 3 * * 1-5"
-    - cron: "5 5 * * 1-5"
-  workflow_dispatch: {}
+  # GitHub 內建 schedule: 對新建立的 workflow 實測會延遲/完全不觸發(cron語法、UTC換算、Actions權限、
+  # Telegram發送都個別驗證過沒問題，純粹是 GitHub 排程佇列本身不可靠)，已改成外部觸發 workflow_dispatch：
+  # intraday_check ← Telegram「跑一次」→ Cloudflare Worker；postclose_stats ← cron-job.org 17:00。
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "intraday_check(盤中即時檢查) 或 postclose_stats(收盤後統計)"
+        type: choice
+        options:
+          - intraday_check
+          - postclose_stats
+        default: intraday_check
+        required: true
 
 permissions:
   contents: write
@@ -37,7 +42,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           PAGES_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
-        run: python src/main.py --pages-url "$PAGES_URL"
+          MODE: ${{ inputs.mode }}
+        run: python src/main.py --mode "$MODE" --pages-url "$PAGES_URL"
 
       - name: Commit and push updated data
         run: |
