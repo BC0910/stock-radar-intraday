@@ -65,8 +65,13 @@ def _dedupe_by_code(*stock_lists) -> list:
     return list(seen.values())
 
 
+def _sort_by_group_then_rank(stocks: list) -> list:
+    """訊息2 同族群股票要排在一起，不要交錯，組內再依排名排序。"""
+    return sorted(stocks, key=lambda s: (s["group"], s["rank"]))
+
+
 def _fetch_intraday_records(today_iso: str):
-    """回傳前100/50/30名要用的完整 records，或 None(非交易日/尚未開盤，呼叫端會提早結束)。"""
+    """回傳前50/30名要用的完整 records，或 None(非交易日/尚未開盤，呼叫端會提早結束)。"""
     close_snapshot = close_data.get_close_snapshot(today_iso)
     universe = close_data.universe_codes(close_snapshot)
     print(f"      全市場 {len(universe)} 檔(TWSE+TPEx)")
@@ -103,7 +108,9 @@ def run(mode: str, dry_run: bool = False, pages_url: str = None) -> dict:
     print(f"[1/6] 模式={mode} | 載入族群設定檔...")
     groups_data = groups_module.load_groups()
     code_to_group = groups_module.build_code_to_group(groups_data)
-    print(f"      {len(groups_data)} 個族群、{len(code_to_group)} 檔成分股")
+    defensive_codes = groups_module.load_defensive_codes()
+    print(f"      {len(groups_data)} 個族群、{len(code_to_group)} 檔成分股 | "
+          f"防禦板塊排除清單 {len(defensive_codes)} 檔")
 
     print(f"[2/6] 抓取資料...")
     if mode == MODE_INTRADAY:
@@ -116,14 +123,14 @@ def run(mode: str, dry_run: bool = False, pages_url: str = None) -> dict:
     if records is None:
         return {"skipped": "data_not_ready"}
 
-    print(f"[3/6] 計算前100/50/30名排行...")
-    top100 = ranking.top_n_by_value(records, 100)
+    print(f"[3/6] 計算前50/30名排行...")
     top50 = ranking.top_n_by_value(records, 50)
     top30 = ranking.top_n_by_value(records, 30)
-    print(f"      前100/50/30名計算完成(共 {len(records)} 檔有效資料)")
+    print(f"      前50/30名計算完成(共 {len(records)} 檔有效資料)")
 
     print(f"[4/6] 族群彙總 + 個股趨勢分析...")
-    group_summaries = group_analysis.summarize_groups(top100, code_to_group)
+    top50_for_groups = [s for s in top50 if s["code"] not in defensive_codes]
+    group_summaries = group_analysis.summarize_groups(top50_for_groups, code_to_group)
     group_history = state.load_group_history()
     yesterday_group_ranking = state.get_yesterday_group_ranking(group_history, today_iso)
     top_groups_with_trend, declined_groups = group_analysis.attach_trend(group_summaries, yesterday_group_ranking)
@@ -136,11 +143,11 @@ def run(mode: str, dry_run: bool = False, pages_url: str = None) -> dict:
     stock_rank_history = stock_trends.update_history(stock_rank_history, today_iso, top50)
     state.save_stock_rank_history(stock_rank_history)
 
-    new_entrants = _attach_group(trends["new_entrants"], code_to_group)
-    persistent_rise = _attach_group(trends["persistent_rise"], code_to_group)
-    fast_rise = _attach_group(trends["fast_rise"], code_to_group)
+    new_entrants = _sort_by_group_then_rank(_attach_group(trends["new_entrants"], code_to_group))
+    persistent_rise = _sort_by_group_then_rank(_attach_group(trends["persistent_rise"], code_to_group))
+    fast_rise = _sort_by_group_then_rank(_attach_group(trends["fast_rise"], code_to_group))
     print(f"      前7大族群: {[g['name'] for g in top_groups_with_trend]} | 趨勢下降: {declined_groups}")
-    print(f"      新上榜 {len(new_entrants)} | 持續上升 {len(persistent_rise)} | 快速上升 {len(fast_rise)}")
+    print(f"      新上榜 {len(new_entrants)} | 持續上榜 {len(persistent_rise)} | 快速上升 {len(fast_rise)}")
 
     print(f"[5/6] 寫出 GitHub Pages 資料(docs/data/latest.json)...")
     today_streaks = {s["code"]: {"consecutive_days": s["streak_days"]} for s in persistent_rise}
@@ -168,7 +175,8 @@ def run(mode: str, dry_run: bool = False, pages_url: str = None) -> dict:
     if send_msg2:
         messages.append(telegram_notify.build_message2(new_entrants, persistent_rise, fast_rise))
     if send_msg1 or send_msg2:
-        msg3 = telegram_notify.build_message3(top_groups_with_trend, flagged_stocks)
+        new_groups_only = [g for g in top_groups_with_trend if g["trend"] == "new"]
+        msg3 = telegram_notify.build_message3(new_groups_only, new_entrants)
         if msg3:
             messages.append(msg3)
 

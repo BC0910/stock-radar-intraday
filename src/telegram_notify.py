@@ -1,8 +1,8 @@
 """組出 Telegram 推播訊息(v2: 族群/個股趨勢版，共3則) + 呼叫 Telegram Bot API 送出。
 
-訊息1：前7大族群(前100名) + 昨日對比趨勢
-訊息2：前50名次異動(新上榜/持續上升/快速上升)
-訊息3：可直接複製貼到 Claude App 的查詢題詞(合併成一則，各題詞空行分隔)
+訊息1：前7大族群(前50名，依族群總成交值排序) + 昨日對比趨勢
+訊息2：前50名次異動(新上榜/持續上榜/快速上升)
+訊息3：可直接複製貼到 Claude App 的查詢題詞(合併成一則，各題詞空行分隔)；只給新進榜的族群/個股
 """
 import os
 
@@ -25,7 +25,7 @@ def _trend_text(trend) -> str:
 
 def build_message1(top_groups_with_trend: list, declined_group_names: list) -> str:
     """top_groups_with_trend: group_analysis.attach_trend() 的第一個回傳值。"""
-    lines = ["前7大族群（前100名）"]
+    lines = ["前7大族群（前50名）"]
     for g in top_groups_with_trend:
         names = "、".join(s["name"] for s in g["representative_stocks"])
         emoji = _DIRECTION_EMOJI[g["direction"]]
@@ -53,9 +53,9 @@ def build_message2(new_entrants: list, persistent_rise: list, fast_rise: list) -
         lines.append("")
 
     if persistent_rise:
-        lines.append("持續上升")
+        lines.append("持續上榜")
         for s in persistent_rise:
-            lines.append(_format_stock_line2(s, f"連續{s['streak_days']}日排名進步"))
+            lines.append(_format_stock_line2(s, f"連續{s['streak_days']}天留在前20名"))
         lines.append("")
 
     if fast_rise:

@@ -1,6 +1,7 @@
-"""前100名依 groups.json 分組，取前7大族群 + 漲跌多數決 + 跟前一交易日比較的排名趨勢。
+"""前50名依 groups.json 分組(先排除防禦板塊)，取前7大族群 + 漲跌多數決 + 跟前一交易日比較的排名趨勢。
 
-沒歸類到 groups.json 任何族群的股票，併入既有的「其他」族群(groups.json 裡本來就有這個分類)。
+沒歸類到 groups.json 任何族群的股票，併入既有的「其他」族群(groups.json 裡本來就有這個分類)。防禦板塊
+(金融/塑化/生技等，見 config/defensive_sector.json)由呼叫端(main.py)先從輸入名單濾掉，這裡不處理。
 """
 from collections import defaultdict
 
@@ -15,14 +16,16 @@ def _direction(change):
     return "up" if change > 0 else "down"
 
 
-def summarize_groups(top100: list, code_to_group: dict) -> list:
-    """top100: 依成交值排序好的前100名(每筆含 code/name/change)。回傳每個至少有1檔進前100的族群彙
-    總，依「擠進前100的檔數」由多到少排序：
-    { name, count, direction("up"/"down"/"flat"，該族群前100成分股漲跌家數多數決，平手記flat),
-      representative_stocks(前 REPRESENTATIVE_STOCKS_COUNT 檔) }
+def summarize_groups(top50: list, code_to_group: dict) -> list:
+    """top50: 依成交值排序好的前50名(每筆含 code/name/value/change，防禦板塊已由呼叫端濾掉)。回傳每
+    個至少有1檔進前50的族群彙總，依「族群內成分股成交值加總」由多到少排序(用總金額而不是檔數，避免
+    檔數多但個股偏中小型的族群，排名壓過檔數少但由權值股撐場的族群)：
+    { name, count, total_value, direction("up"/"down"/"flat"，該族群前50成分股漲跌家數多數決，平手
+      記flat), representative_stocks(前 REPRESENTATIVE_STOCKS_COUNT 檔，已經是排名最高的，因為輸入
+      名單本身就是排序好的) }
     """
     by_group = defaultdict(list)
-    for stock in top100:
+    for stock in top50:
         group_name = code_to_group.get(stock["code"], UNCLASSIFIED_GROUP)
         by_group[group_name].append(stock)
 
@@ -34,11 +37,12 @@ def summarize_groups(top100: list, code_to_group: dict) -> list:
         summaries.append({
             "name": group_name,
             "count": len(stocks),
+            "total_value": sum(s["value"] for s in stocks),
             "direction": direction,
             "representative_stocks": stocks[:REPRESENTATIVE_STOCKS_COUNT],
         })
 
-    summaries.sort(key=lambda g: g["count"], reverse=True)
+    summaries.sort(key=lambda g: g["total_value"], reverse=True)
     return summaries
 
 
