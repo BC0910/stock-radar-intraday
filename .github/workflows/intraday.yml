@@ -3,7 +3,7 @@ name: Intraday ranking update
 on:
   # GitHub 內建 schedule: 對新建立的 workflow 實測會延遲/完全不觸發(cron語法、UTC換算、Actions權限、
   # Telegram發送都個別驗證過沒問題，純粹是 GitHub 排程佇列本身不可靠)，已改成外部觸發 workflow_dispatch：
-  # intraday_check ← Telegram「跑一次」→ Cloudflare Worker；postclose_stats ← cron-job.org 17:00。
+  # intraday_check ← Telegram「run」→ Cloudflare Worker；postclose_stats ← cron-job.org 17:00。
   workflow_dispatch:
     inputs:
       mode:

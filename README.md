@@ -32,7 +32,7 @@ python src/main.py --mode intraday_check               # 正式執行：完整�
 程佇列本身不可靠），因此改成兩種外部觸發方式，都是呼叫同一支 `workflow_dispatch` API、用 `mode`
 這個 input 參數區分行為：
 
-- **`intraday_check`（盤中即時檢查）**：你自己傳一則 Telegram 訊息「跑一次」給 Bot，由
+- **`intraday_check`（盤中即時檢查）**：你自己傳一則 Telegram 訊息「run」給 Bot，由
   Cloudflare Worker 驗證是本人後觸發。部署步驟見 [`cloudflare-worker/README.md`](cloudflare-worker/README.md)。
 - **`postclose_stats`（收盤後統計）**：cron-job.org 每個交易日台灣時間 17:00 定時呼叫，用官方收盤
   成交值(比即時報價準確)重新算一次。設定步驟同樣在
@@ -50,7 +50,7 @@ repo 設定 Settings → Pages → Deploy from branch: `main` / `/docs`，之後
 
 - `config/groups.json`：族群分類（參考版本，見上）
 - `src/`：程式碼
-- `cloudflare-worker/`：Telegram「跑一次」觸發用的 Worker 程式碼 + 部署說明
+- `cloudflare-worker/`：Telegram「run」觸發用的 Worker 程式碼 + 部署說明
 - `docs/`：GitHub Pages 靜態頁面 + 給頁面讀的 JSON
 - `data/close_cache/`：官方收盤成交值快取(前一交易日基準 + 當天收盤後統計用)
 - `data/state/`：族群排名歷史、個股排名歷史、訊息去重複用的狀態檔（由 GitHub Actions 執行後寫回

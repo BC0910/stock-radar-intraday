@@ -1,7 +1,7 @@
 /**
  * Telegram webhook -> GitHub Actions workflow_dispatch 觸發器。
  *
- * 使用者傳「跑一次」給 Telegram Bot -> Telegram 呼叫這支 Worker -> 驗證是本人、驗證觸發指令文字 ->
+ * 使用者傳「run」給 Telegram Bot -> Telegram 呼叫這支 Worker -> 驗證是本人、驗證觸發指令文字 ->
  * 呼叫 GitHub API 觸發 stock-radar-intraday 的 intraday.yml(mode=intraday_check)。
  *
  * 需要的 Secret(在 Cloudflare Dashboard 的 Settings -> Variables 加，型態選 Secret，不要選一般
@@ -11,7 +11,7 @@
  *   - TELEGRAM_BOT_TOKEN: 選填，設定了才會在觸發後回覆一則「已收到」訊息
  */
 
-const TRIGGER_TEXT = "跑一次";
+const TRIGGER_TEXT = "run";
 const GITHUB_OWNER = "BC0910";
 const GITHUB_REPO = "stock-radar-intraday";
 const WORKFLOW_FILE = "intraday.yml";
@@ -31,7 +31,7 @@ export default {
 
     const message = update.message;
     const chatId = message && message.chat && message.chat.id;
-    const text = message && message.text;
+    const text = (message && message.text || "").trim().toLowerCase();
 
     if (String(chatId) !== String(env.TELEGRAM_CHAT_ID) || text !== TRIGGER_TEXT) {
       // 不是本人或不是觸發指令，直接忽略，一律回 200 避免 Telegram 一直重送這個 webhook。

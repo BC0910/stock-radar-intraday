@@ -6,7 +6,7 @@
     python src/main.py --mode intraday_check --dry-run # 本機測試：一樣抓真實資料、一樣寫檔，但不會真的呼叫 Telegram API
 
 觸發方式(GitHub Actions 內建 schedule: 已移除，實測對新建立的 workflow 不可靠)：
-    intraday_check  ← 使用者傳 Telegram「跑一次」→ Cloudflare Worker → workflow_dispatch
+    intraday_check  ← 使用者傳 Telegram「run」→ Cloudflare Worker → workflow_dispatch
     postclose_stats ← cron-job.org 每個交易日 17:00(台灣時間) → workflow_dispatch
     兩者都是同一支 workflow 的 workflow_dispatch，差別只在 mode 這個 input 參數。
 """

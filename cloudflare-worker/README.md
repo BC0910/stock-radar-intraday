@@ -1,6 +1,6 @@
 # Cloudflare Worker 部署步驟
 
-這支 Worker 讓你傳一則 Telegram 訊息「跑一次」就能觸發 GitHub Actions 執行盤中即時檢查
+這支 Worker 讓你傳一則 Telegram 訊息「run」就能觸發 GitHub Actions 執行盤中即時檢查
 (`mode=intraday_check`)。以下每一步都在 Cloudflare/Telegram/cron-job.org 的網頁上操作，**任何密鑰
 值都由你自己貼進網頁欄位，不會有人（包含 Claude）幫你在網頁表單裡輸入密鑰**。
 
@@ -55,7 +55,7 @@ https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=<WORKER_URL>
 
 ## 驗證
 
-- 傳「跑一次」給你的 Telegram Bot，幾秒內應該會收到「已收到，開始執行...」(如果你設定了
+- 傳「run」給你的 Telegram Bot，幾秒內應該會收到「已收到，開始執行...」(如果你設定了
   `TELEGRAM_BOT_TOKEN`)，接著到 repo 的 Actions 分頁應該會看到一筆新的 `workflow_dispatch` run，
   `mode` 是 `intraday_check`。
 - cron-job.org 那筆要等到週一到週五 17:00 才會自然觸發；也可以在 cron-job.org 後台手動按一次
