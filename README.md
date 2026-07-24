@@ -1,12 +1,14 @@
 # stock-radar-intraday
 
 盤中即時上市(TWSE)/上櫃(TPEx)成交值排行工具。以 `config/groups.json` 族群分類為主軸，用 Telegram
-推播「前7大族群動態」「前50名個股異動(新上榜/持續上升/快速上升)」「可貼去問 Claude 的查詢題詞」三
-則訊息，GitHub Pages 顯示目前完整排行。全程跑在 GitHub Actions，不需要本機常駐。
+推播「前7大族群動態(依前50名總成交值排序)」「前50名個股異動(新上榜/持續上榜/快速上升)」「可貼去問
+Claude 的查詢題詞(只給新進榜的族群/個股)」三則訊息，GitHub Pages 顯示目前完整排行。全程跑在
+GitHub Actions，不需要本機常駐。
 
 跟收盤後工具 `stock-radar` 是刻意分開、不整合的獨立專案，只有 `config/groups.json`（族群分類設定）
-是從 `stock-radar/config/groups.json` **手動複製**過來當參考。`stock-radar` 那邊的分類若有更動，
-要跟著手動複製更新這份檔案（目前沒有自動同步機制，因為 `stock-radar` 還不是 git repo）。
+與 `config/defensive_sector.json`（防禦板塊排除清單：金融/塑化/生技等，前7大族群排名時整個不列入
+計算）是從 `stock-radar/config/` **手動複製**過來當參考。`stock-radar` 那邊若有更動，要跟著手動複
+製更新這兩份檔案（目前沒有自動同步機制，因為 `stock-radar` 還不是 git repo）。
 
 ## 執行方式
 
