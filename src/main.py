@@ -159,44 +159,47 @@ def run(mode: str, dry_run: bool = False, pages_url: str = None) -> dict:
     )
     print(f"      已寫出")
 
-    print(f"[6/6] 判斷去重複、組訊息、視情況推播 Telegram...")
-    today_group_names = {g["name"] for g in top_groups_with_trend}
-    last_pushed_msg1 = state.load_last_pushed_msg1()
-    send_msg1 = today_group_names != last_pushed_msg1
-
-    flagged_stocks = _dedupe_by_code(new_entrants, persistent_rise, fast_rise)
-    today_msg2_codes = {s["code"] for s in flagged_stocks}
-    last_pushed_msg2 = state.load_last_pushed_msg2()
-    send_msg2 = bool(today_msg2_codes) and today_msg2_codes != last_pushed_msg2
-
     messages = []
-    if send_msg1:
-        messages.append(telegram_notify.build_message1(top_groups_with_trend, declined_groups))
-    if send_msg2:
-        messages.append(telegram_notify.build_message2(new_entrants, persistent_rise, fast_rise))
-    if send_msg1 or send_msg2:
-        new_groups_only = [g for g in top_groups_with_trend if g["trend"] == "new"]
-        msg3 = telegram_notify.build_message3(new_groups_only, new_entrants)
-        if msg3:
-            messages.append(msg3)
+    if mode == MODE_POSTCLOSE:
+        print(f"[6/6] {mode} 模式只負責更新資料庫(族群/個股排名歷史、Pages)，不推播 Telegram。")
+    else:
+        print(f"[6/6] 判斷去重複、組訊息、視情況推播 Telegram...")
+        today_group_names = {g["name"] for g in top_groups_with_trend}
+        last_pushed_msg1 = state.load_last_pushed_msg1()
+        send_msg1 = today_group_names != last_pushed_msg1
 
-    for i, message in enumerate(messages, start=1):
-        print(f"      {'[dry-run] ' if dry_run else ''}訊息{i}：")
-        print("      ----------------------------------------")
-        print(message)
-        print("      ----------------------------------------")
-        if not dry_run:
-            telegram_notify.send_message(message)
+        flagged_stocks = _dedupe_by_code(new_entrants, persistent_rise, fast_rise)
+        today_msg2_codes = {s["code"] for s in flagged_stocks}
+        last_pushed_msg2 = state.load_last_pushed_msg2()
+        send_msg2 = bool(today_msg2_codes) and today_msg2_codes != last_pushed_msg2
 
-    if messages and not dry_run:
-        print(f"      已推播 {len(messages)} 則 Telegram 訊息")
-    elif not messages:
-        print("      這次沒有新內容要播(訊息1、2 組合都跟上次推播時相同)。")
+        if send_msg1:
+            messages.append(telegram_notify.build_message1(top_groups_with_trend, declined_groups))
+        if send_msg2:
+            messages.append(telegram_notify.build_message2(new_entrants, persistent_rise, fast_rise))
+        if send_msg1 or send_msg2:
+            new_groups_only = [g for g in top_groups_with_trend if g["trend"] == "new"]
+            msg3 = telegram_notify.build_message3(new_groups_only, new_entrants)
+            if msg3:
+                messages.append(msg3)
 
-    if send_msg1:
-        state.save_last_pushed_msg1(today_group_names)
-    if send_msg2:
-        state.save_last_pushed_msg2(today_msg2_codes)
+        for i, message in enumerate(messages, start=1):
+            print(f"      {'[dry-run] ' if dry_run else ''}訊息{i}：")
+            print("      ----------------------------------------")
+            print(message)
+            print("      ----------------------------------------")
+            if not dry_run:
+                telegram_notify.send_message(message)
+
+        if messages and not dry_run:
+            print(f"      已推播 {len(messages)} 則 Telegram 訊息")
+        elif not messages:
+            print("      這次沒有新內容要播(訊息1、2 組合都跟上次推播時相同)。")
+
+        if send_msg1:
+            state.save_last_pushed_msg1(today_group_names)
+        if send_msg2:
+            state.save_last_pushed_msg2(today_msg2_codes)
 
     return {
         "date": today_iso, "mode": mode, "session_label": session_label,
